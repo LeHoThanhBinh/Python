@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gợi ý thói quen AI</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='suggest_habit.css') }}">
+</head>
+<body>
+    <header>
+        <h1>Gợi ý thói quen AI theo thời tiết</h1>
+    </header>
+    <main class="container">
+        {% with messages = get_flashed_messages(with_categories=True) %}
+          {% if messages %}
+            {% for category, message in messages %}
+              <div class="flash flash-{{ category }}" role="alert">{{ message }}</div>
+            {% endfor %}
+          {% endif %}
+        {% endwith %}
+        <section class="card">
+            <form method="post" action="{{ url_for('suggest_habit', user_id=user_id) }}">
+                <div class="form-group">
+                    <label for="city">Thành phố</label>
+                    <input type="text" id="city" name="city" placeholder="Thành phố" required>
+                </div>
+                <button type="submit" name="create" value="1" class="btn btn-primary">Gợi ý & Tạo thói quen</button>
+            </form>
+            {% if suggestion %}
+                <div class="suggestion">
+                    <strong>Gợi ý AI:</strong> {{ suggestion }}
+                </div>
+            {% endif %}
+            <div class="back-link">
+                <a href="{{ url_for('dashboard', user_id=user_id) }}" class="btn btn-secondary">Quay lại Dashboard</a>
+            </div>
+        </section>
+    </main>
+</body>
+</html>

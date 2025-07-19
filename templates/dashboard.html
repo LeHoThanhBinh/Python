@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <title>Bảng điều khiển Lối sống tích cực</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='dashboard.css') }}">
+</head>
+<body>
+<div class="container">
+    <header class="header">
+        <h1>Lối sống tích cực & bền vững</h1>
+        <p>Chào mừng, {{ fullname }}!</p>
+    </header>
+
+    <!-- Thời tiết -->
+    <section class="weather-section">
+        <form method="get" class="city-form">
+            <label for="city">Chọn vị trí hiện tại:</label>
+            <select name="city" required>
+                <option value="">-- Chọn thành phố --</option>
+                {% set cities = [
+                    "Lào Cai", "Tuyên Quang", "Lai Châu", "Điện Biên", "Cao Bằng", "Lạng Sơn", "Sơn La", "Thái Nguyên", "Phú Thọ", "Quảng Ninh",
+                    "Bắc Ninh", "Hưng Yên", "Ninh Bình", "Hà Nội", "Hải Phòng",
+                    "Thanh Hóa", "Nghệ An", "Hà Tĩnh", "Quảng Trị", "Huế", "Đà Nẵng", "Quảng Ngãi", "Gia Lai", "Đắk Lắk", "Lâm Đồng", "Khánh Hòa",
+                    "Tây Ninh", "Hồ Chí Minh", "Đồng Nai", "Vĩnh Long", "Đồng Tháp", "Cần Thơ", "An Giang", "Cà Mau"
+                ] %}
+                {% for city in cities %}
+                    <option value="{{ city }}" {% if weather_city == city %}selected{% endif %}>{{ city }}</option>
+                {% endfor %}
+            </select>
+            <button type="submit" class="btn">Xác nhận</button>
+        </form>
+
+        {% if weather %}
+            <div class="weather-info">
+                <h3>Thời tiết hiện tại tại {{ weather_city }}:</h3>
+                <p>{{ weather.desc }} - {{ weather.temp }}°C</p>
+                <img src="https://openweathermap.org/img/wn/{{ weather.icon }}.png" alt="icon">
+            </div>
+        {% else %}
+            <p>Chưa chọn thành phố hoặc không thể lấy dữ liệu thời tiết.</p>
+        {% endif %}
+    </section>
+
+    <!-- Gợi ý từ AI -->
+    {% with messages = get_flashed_messages() %}
+        {% if messages %}
+            <section class="ai-suggestion">
+                {% for msg in messages %}
+                    <div class="ai-box">
+                        🤖 <strong>Gợi ý từ AI:</strong> {{ msg }}
+                    </div>
+                {% endfor %}
+            </section>
+        {% endif %}
+    {% endwith %}
+
+    <!-- Nội dung bản tin -->
+    <section class="content-section">
+        <h2>Bản tin về môi trường & sức khỏe</h2>
+        {% if contents and contents|length > 0 %}
+            <ul class="content-list">
+                {% for content in contents %}
+                    {% if content is sequence and content|length > 1 %}
+                        <li>
+                            <h4>{{ content[0] }}</h4>
+                            <p>{{ content[1][:120] }}...</p>
+                        </li>
+                    {% else %}
+                        <li>Dữ liệu bản tin không hợp lệ.</li>
+                    {% endif %}
+                {% endfor %}
+            </ul>
+        {% else %}
+            <p>Chưa có bản tin nào.</p>
+        {% endif %}
+    </section>
+
+    <!-- Thói quen chưa hoàn thành -->
+    <section class="habit-section">
+        <h2>Thói quen chưa hoàn thành hôm nay</h2>
+        {% if pending_habits and pending_habits|length > 0 %}
+            <ul class="habit-list">
+                {% for habit in pending_habits %}
+                    {% if habit is mapping and habit.get('name') %}
+                        <li class="habit-item">
+                            <div class="habit-info">
+                                <strong>{{ habit.name }}</strong><br>
+                                <small>Mô tả: {{ habit.description|default('Chưa có') }}</small><br>
+                                <small>Thời lượng: {{ habit.target_duration|default(0) }} phút</small><br>
+                                <small>
+                                    Giờ thực hiện:
+                                    {% set t = habit.time_of_day.split(":") if habit.time_of_day else ['09', '00'] %}
+                                    {% if t|length >= 2 %}
+                                        {% set hour = t[0]|int %}
+                                        {% set minute = t[1]|int %}
+                                        {% if hour == 0 %}
+                                            12:{{ "%02d"|format(minute) }} AM
+                                        {% elif hour < 12 %}
+                                            {{ "%02d"|format(hour) }}:{{ "%02d"|format(minute) }} AM
+                                        {% elif hour == 12 %}
+                                            12:{{ "%02d"|format(minute) }} PM
+                                        {% else %}
+                                            {{ "%02d"|format(hour - 12) }}:{{ "%02d"|format(minute) }} PM
+                                        {% endif %}
+                                    {% else %}
+                                        {{ habit.time_of_day|default('09:00') }} (Định dạng giờ không hợp lệ)
+                                    {% endif %}
+                                </small><br>
+                                <small>Dự kiến hoàn thành: {{ habit.expected_completion|default('09:30') }}</small><br>
+                                <small>Thời tiết: {{ habit.weather_condition|default('Không rõ') }}</small><br>
+                                <small>Đánh giá: {{ habit.evaluation|default('Chưa đánh giá') }}</small><br>
+                                <small>Lời khuyên: {{ habit.advice|default('Chuẩn bị đầy đủ') }}</small>
+                            </div>
+                            <form method="post" action="{{ url_for('track_habit', habit_id=habit.id|default(0)) }}">
+                                <button type="submit" name="start" class="btn-start">Bắt đầu</button>
+                                <button type="submit" name="complete" class="btn-complete">Hoàn thành</button>
+                            </form>
+                        </li>
+                    {% else %}
+                        <li>Dữ liệu thói quen không hợp lệ: {{ habit }}</li>
+                    {% endif %}
+                {% endfor %}
+            </ul>
+        {% else %}
+            <p>Bạn đã hoàn thành hết các thói quen hôm nay!</p>
+        {% endif %}
+
+        <a href="{{ url_for('create_habit', user_id=user_id, city=weather_city) }}" class="btn btn-primary">Tạo thói quen mới</a>
+        <button id="suggestHabitBtn" class="btn btn-secondary" data-city="{{ weather_city }}">🤖 Gợi ý thói quen từ AI</button>
+    </section>
+
+    <!-- Thói quen đã hoàn thành -->
+    <section class="habit-section">
+        <h2>Thói quen đã hoàn thành hôm nay ✅</h2>
+        {% if completed_habits and completed_habits|length > 0 %}
+            <ul class="habit-list completed">
+                {% for habit in completed_habits %}
+                    {% if habit is mapping and habit.get('name') %}
+                        <li class="habit-item">
+                            <div class="habit-info">
+                                <strong>{{ habit.name }}</strong>
+                                <span>
+                                    {% set t = habit.time_of_day.split(":") %}
+                                    {% if t|length >= 2 %}
+                                        {% set hour = t[0]|int %}
+                                        {% set minute = t[1] %}
+                                        {% if hour == 0 %}
+                                            12:{{ minute }} AM
+                                        {% elif hour < 12 %}
+                                            {{ "%02d"|format(hour) }}:{{ minute }} AM
+                                        {% elif hour == 12 %}
+                                            12:{{ minute }} PM
+                                        {% else %}
+                                            {{ "%02d"|format(hour - 12) }}:{{ minute }} PM
+                                        {% endif %}
+                                    {% else %}
+                                        {{ habit.time_of_day }} (Định dạng giờ không hợp lệ)
+                                    {% endif %}
+                                </span>
+                            </div>
+                            <span class="completed-label">✅ Đã hoàn thành</span>
+                        </li>
+                    {% else %}
+                        <li>Dữ liệu thói quen không hợp lệ.</li>
+                    {% endif %}
+                {% endfor %}
+            </ul>
+        {% else %}
+            <p>Chưa có thói quen nào được hoàn thành hôm nay.</p>
+        {% endif %}
+    </section>
+
+    <footer class="footer">
+        <a href="{{ url_for('logout') }}" class="btn btn-logout">Đăng xuất</a>
+    </footer>
+</div>
+
+<script>
+    // Gửi yêu cầu tạo một thói quen ngẫu nhiên
+    document.getElementById("suggestHabitBtn").onclick = function () {
+        const city = this.getAttribute("data-city");
+        if (!city) {
+            alert("Vui lòng chọn thành phố trước khi gợi ý thói quen.");
+            return;
+        }
+
+        document.getElementById("suggestHabitBtn").disabled = true;
+        document.getElementById("suggestHabitBtn").innerText = "Đang tạo...";
+
+        fetch("{{ url_for('suggest_habit', user_id=user_id) }}", {
+            method: "POST",
+            headers: {
+                "X-Requested-With": "XMLHttpRequest",
+                "Content-Type": "application/x-www-form-urlencoded",
+            },
+            body: `city=${encodeURIComponent(city)}`
+        })
+        .then(async response => {
+            document.getElementById("suggestHabitBtn").disabled = false;
+            document.getElementById("suggestHabitBtn").innerText = "🤖 Gợi ý thói quen từ AI";
+            const contentType = response.headers.get("content-type");
+            if (contentType && contentType.includes("application/json")) {
+                const data = await response.json();
+                if (data.success) {
+                    alert("✅ Đã tạo thói quen từ AI!");
+                    location.reload();
+                } else {
+                    alert("❌ Lỗi khi tạo thói quen: " + (data.error || "Không rõ"));
+                }
+            } else {
+                const text = await response.text();
+                console.error("⚠️ Phản hồi không phải JSON:", text);
+                alert("❌ Server trả về nội dung không hợp lệ:\n" + text.slice(0, 200));
+            }
+        })
+        .catch(error => {
+            document.getElementById("suggestHabitBtn").disabled = false;
+            document.getElementById("suggestHabitBtn").innerText = "🤖 Gợi ý thói quen từ AI";
+            console.error("Fetch error:", error);
+            alert("❌ Lỗi kết nối máy chủ: " + error.message);
+        });
+    };
+</script>
+
+</body>
+</html>

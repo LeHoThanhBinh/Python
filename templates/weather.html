@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <title>Thời tiết hiện tại</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='weather.css') }}">
+</head>
+<body>
+    <div class="container">
+        <h2>Thời tiết hiện tại</h2>
+        <form class="inline-form" method="post">
+            <input type="text" name="city" placeholder="Nhập thành phố..." required>
+            <button type="submit" class="btn">Xem thời tiết</button>
+        </form>
+        {% if weather %}
+            <div class="suggestion">
+                <strong>{{ weather['desc'] }}</strong> - {{ weather['temp'] }}°C
+                <img src="https://openweathermap.org/img/wn/{{ weather['icon'] }}.png" alt="icon">
+            </div>
+        {% endif %}
+        <a href="{{ url_for('dashboard', user_id=user_id) }}" class="btn">Quay lại Dashboard</a>
+    </div>
+</body>
+</html>
+                <img src="https://openweathermap.org/img/wn/{{ weather['icon'] }}.png" alt="icon">
+            </div>
+        {% endif %}
+        <a href="{{ url_for('dashboard', user_id=user_id) }}" class="btn">Quay lại Dashboard</a>
+    </div>
+</body>
+</html>

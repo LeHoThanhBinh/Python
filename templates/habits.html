@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <title>Tạo thói quen mới</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='habits.css') }}">
+</head>
+<body>
+<div class="container">
+    <h1>Tạo thói quen mới</h1>
+
+    {% if weather %}
+        <div class="weather-warning">
+            <p>⛅ Thời tiết tại <strong>{{ weather_city }}</strong>: {{ weather.desc }} - {{ weather.temp }}°C</p>
+        </div>
+    {% endif %}
+
+    {% with messages = get_flashed_messages() %}
+      {% if messages %}
+        <ul class="flashes">
+        {% for message in messages %}
+          <li>{{ message }}</li>
+        {% endfor %}
+        </ul>
+      {% endif %}
+    {% endwith %}
+
+    <form method="post">
+        <label for="name">Tên thói quen:</label>
+        <input type="text" name="name" required>
+
+        <label for="description">Mô tả:</label>
+        <textarea name="description" required></textarea>
+
+        <label for="category">Danh mục:</label>
+        <select name="category" required>
+            <option value="Vận động">Vận động</option>
+            <option value="Ăn uống">Ăn uống</option>
+            <option value="Ngủ nghỉ">Ngủ nghỉ</option>
+            <option value="Thiền/Thở">Thiền/Thở</option>
+            <option value="Môi trường">Môi trường</option>
+        </select>
+
+        <label for="frequency">Tần suất (ví dụ: hàng ngày, 3 lần/tuần):</label>
+        <input type="text" name="frequency" required>
+
+        <label for="target_duration">Thời gian mục tiêu (phút):</label>
+        <input type="number" name="target_duration" min="1" max="240" required>
+
+        <label for="time_of_day">Thời gian cụ thể:</label>
+        <input type="time" name="time_of_day" required>
+
+        <button type="submit" class="btn btn-submit">Tạo thói quen</button>
+        <a href="{{ url_for('dashboard', user_id=user_id, city=weather_city) }}" class="btn btn-cancel">Quay lại</a>
+    </form>
+</div>
+</body>
+</html>
