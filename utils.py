@@ -159,63 +159,50 @@ def create_fallback_habit(weather_desc, current_hour):
 
 def ai_api_suggest_habit(weather, user_id, user_habits=None):
     """Sử dụng Gemini API để tạo gợi ý thói quen ngẫu nhiên dựa trên thời tiết và DB."""
-    
-    # Kiểm tra API key
     api_key = os.environ.get("GEMINI_API_KEY")
     if not api_key:
         logger.error("GEMINI_API_KEY không được thiết lập")
         return create_fallback_habit("không rõ", datetime.now().hour)
-    
+
     try:
-        # Cấu hình Gemini API
         genai.configure(api_key=api_key)
-        
-        # Sử dụng model mới nhất (thay vì gemini-1.5-pro deprecated)
-        model = genai.GenerativeModel('gemini-2.0-flash-exp')  # Model mới nhất
-        
-        # Lấy thói quen hiện có
-        existing_habits = get_existing_habits(user_id)
-        
-        # Chuẩn bị dữ liệu thời tiết và thời gian
+        model = genai.GenerativeModel('gemini-2.0-flash-exp')
+        existing_habits = get_existing_habits(user_id) if user_habits is None else user_habits
+
         temp = weather.get("temp", 25) if weather else 25
         desc = weather.get("desc", "không rõ") if weather else "không rõ"
         humidity = weather.get("humidity", 50) if weather else 50
         current_hour = datetime.now().hour
-        
-        # Tạo prompt chi tiết và rõ ràng
+        current_minute = datetime.now().minute
+
+        # Đảm bảo thời gian gợi ý hợp lý dựa trên giờ hiện tại
+        if 0 <= current_hour < 5 or current_hour >= 22:  # Giờ nghỉ ngơi
+            suggested_hour = 7  # Gợi ý buổi sáng
+        else:
+            suggested_hour = current_hour + 1 if current_hour < 23 else 0
+
         prompt = f"""
         Hãy gợi ý MỘT thói quen mới phù hợp với điều kiện sau:
-        
-        THỜI TIẾT HIỆN TẠI:
         - Nhiệt độ: {temp}°C
         - Mô tả: {desc}
         - Độ ẩm: {humidity}%
-        - Giờ hiện tại: {current_hour}:00
-        
-        THÓI QUEN HIỆN CÓ (tránh trùng lặp): 
-        {', '.join(existing_habits) if existing_habits else 'Chưa có thói quen nào'}
-        
+        - Giờ hiện tại: {current_hour}:{current_minute:02d}
+        - Thói quen đã có: {', '.join(existing_habits) if existing_habits else 'Chưa có thói quen nào'}
         YÊU CẦU:
-        1. Thói quen phải KHÁC hoàn toàn với danh sách hiện có
-        2. Phù hợp với thời tiết và giờ hiện tại
-        3. Thực tế và có thể thực hiện được
-        4. Thời lượng từ 10-60 phút
-        5. Trả lời bằng tiếng Việt
-        
-        ĐỊNH DẠNG JSON BẮT BUỘC (chỉ trả về JSON, không giải thích thêm):
+        - KHÁC danh sách hiện có
+        - Phù hợp với thời tiết và giờ hiện tại (gợi ý giờ thực hiện gần với {suggested_hour}:00)
+        - Thực tế, thời lượng 10-60 phút
+        ĐỊNH DẠNG JSON:
         {{
-            "ten_thoi_quen": "Tên ngắn gọn của thói quen",
-            "mo_ta": "Mô tả chi tiết cách thực hiện",
+            "ten_thoi_quen": "Tên",
+            "mo_ta": "Mô tả",
             "thoi_luong_phut": 30,
             "gio_thuc_hien": "HH:MM",
             "gio_hoan_thanh": "HH:MM",
-            "loi_khuyen": "Lời khuyên cụ thể để thực hiện hiệu quả"
+            "loi_khuyen": "Lời khuyên"
         }}
         """
-        
-        logger.info(f"Gửi prompt tới Gemini API cho user {user_id}")
-        
-        # Gọi API với cấu hình timeout và retry mechanism
+
         try:
             response = model.generate_content(
                 prompt,
@@ -224,92 +211,62 @@ def ai_api_suggest_habit(weather, user_id, user_habits=None):
                     max_output_tokens=500,
                     top_p=0.8,
                     top_k=40
-                ),
-                safety_settings=[
-                    {
-                        "category": "HARM_CATEGORY_HARASSMENT",
-                        "threshold": "BLOCK_MEDIUM_AND_ABOVE"
-                    },
-                    {
-                        "category": "HARM_CATEGORY_HATE_SPEECH",
-                        "threshold": "BLOCK_MEDIUM_AND_ABOVE"
-                    },
-                    {
-                        "category": "HARM_CATEGORY_SEXUALLY_EXPLICIT",
-                        "threshold": "BLOCK_MEDIUM_AND_ABOVE"
-                    },
-                    {
-                        "category": "HARM_CATEGORY_DANGEROUS_CONTENT",
-                        "threshold": "BLOCK_MEDIUM_AND_ABOVE"
-                    }
-                ]
-            )
-        except Exception as api_error:
-            logger.warning(f"Lỗi với gemini-2.0-flash-exp, thử model dự phòng: {api_error}")
-            # Fallback sang model khác nếu model chính không khả dụng
-            model = genai.GenerativeModel('gemini-1.5-flash')
-            response = model.generate_content(
-                prompt,
-                generation_config=genai.types.GenerationConfig(
-                    temperature=0.7,
-                    max_output_tokens=500,
                 )
             )
-        
+        except Exception as api_error:
+            logger.warning(f"Lỗi với model chính, dùng model dự phòng: {api_error}")
+            model = genai.GenerativeModel('gemini-1.5-flash')
+            response = model.generate_content(prompt)
+
         if not response or not response.text:
-            logger.error("Gemini API trả về response rỗng")
             return create_fallback_habit(desc, current_hour)
-        
-        logger.info(f"Nhận được response từ Gemini: {response.text[:100]}...")
-        
-        # Trích xuất JSON từ response
+
         data = extract_json_from_response(response.text)
-        
         if not data:
-            logger.error("Không thể trích xuất JSON từ Gemini response")
             return create_fallback_habit(desc, current_hour)
-        
-        # Xử lý và validate dữ liệu
+
+        duration = int(str(data.get("thoi_luong_phut", 30)).split()[0])
+        duration = max(10, min(duration, 120))
+
+        # Đảm bảo gio_thuc_hien hợp lý dựa trên giờ hiện tại
+        time_of_day = data.get("gio_thuc_hien", f"{suggested_hour}:00")
+        if not re.match(r'^\d{1,2}:\d{2}$', time_of_day):
+            time_of_day = f"{suggested_hour}:00"
         try:
-            duration_str = str(data.get("thoi_luong_phut", "30"))
-            duration = int(duration_str.split()[0]) if duration_str else 30
-            duration = max(10, min(duration, 120))  # Giới hạn từ 10-120 phút
-            
-            time_of_day = data.get("gio_thuc_hien", f"{current_hour + 1}:00")
-            if not re.match(r'^\d{1,2}:\d{2}$', time_of_day):
-                time_of_day = f"{current_hour + 1}:00"
-            
-            completion_time = data.get("gio_hoan_thanh", f"{current_hour + 1}:30")
-            if not re.match(r'^\d{1,2}:\d{2}$', completion_time):
-                # Tính toán thời gian hoàn thành dự kiến
-                start_hour, start_min = map(int, time_of_day.split(':'))
-                end_min = start_min + duration
-                end_hour = start_hour + (end_min // 60)
-                end_min = end_min % 60
-                completion_time = f"{end_hour:02d}:{end_min:02d}"
-            
-            result = {
-                "name": data.get("ten_thoi_quen", "Thói quen mới")[:50],  # Giới hạn độ dài
-                "description": data.get("mo_ta", "Mô tả thói quen")[:200],
-                "time_of_day": time_of_day,
-                "target_duration": duration,
-                "expected_completion": completion_time,
-                "weather_condition": desc,
-                "evaluation": f"Được tạo bởi AI dựa trên thời tiết {temp}°C, {desc}",
-                "advice": data.get("loi_khuyen", "Thực hiện đều đặn để có kết quả tốt nhất")[:150]
-            }
-            
-            logger.info(f"Tạo thói quen thành công từ AI: {result['name']}")
-            return result
-            
-        except (ValueError, KeyError, AttributeError) as e:
-            logger.error(f"Lỗi xử lý dữ liệu từ Gemini: {e}")
-            return create_fallback_habit(desc, current_hour)
-            
+            start_hour, start_min = map(int, time_of_day.split(':'))
+            if start_hour < current_hour or (start_hour == current_hour and start_min < current_minute):
+                start_hour = suggested_hour
+            if start_hour > 23:
+                start_hour = 0
+            time_of_day = f"{start_hour:02d}:{start_min:02d}"
+        except (ValueError, IndexError):
+            time_of_day = f"{suggested_hour}:00"
+
+        # Tính toán gio_hoan_thanh
+        try:
+            start_hour, start_min = map(int, time_of_day.split(':'))
+            total_minutes = start_hour * 60 + start_min + duration
+            end_hour = total_minutes // 60 % 24
+            end_min = total_minutes % 60
+            completion_time = f"{end_hour:02d}:{end_min:02d}"
+        except Exception as e:
+            logger.warning(f"Lỗi tính giờ hoàn thành: {e}")
+            completion_time = f"{(start_hour + 1) % 24:02d}:{(start_min + duration) % 60:02d}"
+
+        return {
+            "name": data.get("ten_thoi_quen", "Thói quen mới")[:50],
+            "description": data.get("mo_ta", "Mô tả thói quen")[:200],
+            "time_of_day": time_of_day,
+            "target_duration": duration,
+            "expected_completion": completion_time,
+            "weather_condition": desc,
+            "evaluation": f"Được tạo bởi AI dựa trên thời tiết {temp}°C, {desc}",
+            "advice": data.get("loi_khuyen", "Thực hiện đều đặn để đạt kết quả tốt")[:150]
+        }
+
     except Exception as e:
         logger.error(f"Lỗi khi gọi Gemini API: {e}")
         return create_fallback_habit(desc, current_hour)
-
 
 def evaluate_habit_with_weather(weather, time_of_day):
     """Đánh giá xem thời gian thực hiện có phù hợp với thời tiết không."""

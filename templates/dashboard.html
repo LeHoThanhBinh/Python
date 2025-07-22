@@ -14,7 +14,7 @@
 
     <!-- Thời tiết -->
     <section class="weather-section">
-        <form method="get" class="city-form">
+        <form method="post" action="{{ url_for('dashboard', user_id=user_id) }}" class="city-form">
             <label for="city">Chọn vị trí hiện tại:</label>
             <select name="city" required>
                 <option value="">-- Chọn thành phố --</option>
@@ -35,7 +35,7 @@
             <div class="weather-info">
                 <h3>Thời tiết hiện tại tại {{ weather_city }}:</h3>
                 <p>{{ weather.desc }} - {{ weather.temp }}°C</p>
-                <img src="https://openweathermap.org/img/wn/{{ weather.icon }}.png" alt="icon">
+                <img src="https://openweathermap.org/img/wn/{{ weather.icon }}.png" alt="Weather icon">
             </div>
         {% else %}
             <p>Chưa chọn thành phố hoặc không thể lấy dữ liệu thời tiết.</p>
@@ -61,7 +61,7 @@
         {% if contents and contents|length > 0 %}
             <ul class="content-list">
                 {% for content in contents %}
-                    {% if content is sequence and content|length > 1 %}
+                    {% if content is sequence and content|length >= 2 %}
                         <li>
                             <h4>{{ content[0] }}</h4>
                             <p>{{ content[1][:120] }}...</p>
@@ -90,30 +90,33 @@
                                 <small>Thời lượng: {{ habit.target_duration|default(0) }} phút</small><br>
                                 <small>
                                     Giờ thực hiện:
-                                    {% set t = habit.time_of_day.split(":") if habit.time_of_day else ['09', '00'] %}
-                                    {% if t|length >= 2 %}
-                                        {% set hour = t[0]|int %}
-                                        {% set minute = t[1]|int %}
-                                        {% if hour == 0 %}
-                                            12:{{ "%02d"|format(minute) }} AM
-                                        {% elif hour < 12 %}
-                                            {{ "%02d"|format(hour) }}:{{ "%02d"|format(minute) }} AM
-                                        {% elif hour == 12 %}
-                                            12:{{ "%02d"|format(minute) }} PM
+                                    {% if habit.time_of_day %}
+                                        {% set t = habit.time_of_day.split(":") %}
+                                        {% if t|length >= 2 %}
+                                            {% set hour = t[0]|int %}
+                                            {% set minute = t[1]|int %}
+                                            {% if hour == 0 %}
+                                                12:{{ "%02d"|format(minute) }} AM
+                                            {% elif hour < 12 %}
+                                                {{ "%02d"|format(hour) }}:{{ "%02d"|format(minute) }} AM
+                                            {% elif hour == 12 %}
+                                                12:{{ "%02d"|format(minute) }} PM
+                                            {% else %}
+                                                {{ "%02d"|format(hour - 12) }}:{{ "%02d"|format(minute) }} PM
+                                            {% endif %}
                                         {% else %}
-                                            {{ "%02d"|format(hour - 12) }}:{{ "%02d"|format(minute) }} PM
+                                            {{ habit.time_of_day }} (Định dạng giờ không hợp lệ)
                                         {% endif %}
                                     {% else %}
-                                        {{ habit.time_of_day|default('09:00') }} (Định dạng giờ không hợp lệ)
+                                        09:00 (Mặc định)
                                     {% endif %}
                                 </small><br>
-                                <small>Dự kiến hoàn thành: {{ habit.expected_completion|default('09:30') }}</small><br>
+                                <small>Dự kiến hoàn thành: {{ habit.expected_completion|default('Không xác định') }}</small><br>
                                 <small>Thời tiết: {{ habit.weather_condition|default('Không rõ') }}</small><br>
                                 <small>Đánh giá: {{ habit.evaluation|default('Chưa đánh giá') }}</small><br>
                                 <small>Lời khuyên: {{ habit.advice|default('Chuẩn bị đầy đủ') }}</small>
                             </div>
-                            <form method="post" action="{{ url_for('track_habit', habit_id=habit.id|default(0)) }}">
-                                <button type="submit" name="start" class="btn-start">Bắt đầu</button>
+                            <form method="post" action="{{ url_for('track_habit', habit_id=habit.id) }}">
                                 <button type="submit" name="complete" class="btn-complete">Hoàn thành</button>
                             </form>
                         </li>
@@ -141,21 +144,25 @@
                             <div class="habit-info">
                                 <strong>{{ habit.name }}</strong>
                                 <span>
-                                    {% set t = habit.time_of_day.split(":") %}
-                                    {% if t|length >= 2 %}
-                                        {% set hour = t[0]|int %}
-                                        {% set minute = t[1] %}
-                                        {% if hour == 0 %}
-                                            12:{{ minute }} AM
-                                        {% elif hour < 12 %}
-                                            {{ "%02d"|format(hour) }}:{{ minute }} AM
-                                        {% elif hour == 12 %}
-                                            12:{{ minute }} PM
+                                    {% if habit.time_of_day %}
+                                        {% set t = habit.time_of_day.split(":") %}
+                                        {% if t|length >= 2 %}
+                                            {% set hour = t[0]|int %}
+                                            {% set minute = t[1] %}
+                                            {% if hour == 0 %}
+                                                12:{{ minute }} AM
+                                            {% elif hour < 12 %}
+                                                {{ "%02d"|format(hour) }}:{{ minute }} AM
+                                            {% elif hour == 12 %}
+                                                12:{{ minute }} PM
+                                            {% else %}
+                                                {{ "%02d"|format(hour - 12) }}:{{ minute }} PM
+                                            {% endif %}
                                         {% else %}
-                                            {{ "%02d"|format(hour - 12) }}:{{ minute }} PM
+                                            {{ habit.time_of_day }} (Định dạng giờ không hợp lệ)
                                         {% endif %}
                                     {% else %}
-                                        {{ habit.time_of_day }} (Định dạng giờ không hợp lệ)
+                                        09:00 (Mặc định)
                                     {% endif %}
                                 </span>
                             </div>
@@ -177,7 +184,6 @@
 </div>
 
 <script>
-    // Gửi yêu cầu tạo một thói quen ngẫu nhiên
     document.getElementById("suggestHabitBtn").onclick = function () {
         const city = this.getAttribute("data-city");
         if (!city) {
@@ -185,8 +191,8 @@
             return;
         }
 
-        document.getElementById("suggestHabitBtn").disabled = true;
-        document.getElementById("suggestHabitBtn").innerText = "Đang tạo...";
+        this.disabled = true;
+        this.innerText = "Đang tạo...";
 
         fetch("{{ url_for('suggest_habit', user_id=user_id) }}", {
             method: "POST",
@@ -197,8 +203,8 @@
             body: `city=${encodeURIComponent(city)}`
         })
         .then(async response => {
-            document.getElementById("suggestHabitBtn").disabled = false;
-            document.getElementById("suggestHabitBtn").innerText = "🤖 Gợi ý thói quen từ AI";
+            this.disabled = false;
+            this.innerText = "🤖 Gợi ý thói quen từ AI";
             const contentType = response.headers.get("content-type");
             if (contentType && contentType.includes("application/json")) {
                 const data = await response.json();
@@ -215,8 +221,8 @@
             }
         })
         .catch(error => {
-            document.getElementById("suggestHabitBtn").disabled = false;
-            document.getElementById("suggestHabitBtn").innerText = "🤖 Gợi ý thói quen từ AI";
+            this.disabled = false;
+            this.innerText = "🤖 Gợi ý thói quen từ AI";
             console.error("Fetch error:", error);
             alert("❌ Lỗi kết nối máy chủ: " + error.message);
         });

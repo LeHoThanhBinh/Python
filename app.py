@@ -1,7 +1,7 @@
-from flask import Flask, render_template, request, redirect, url_for, flash, jsonify
+from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, session
 from db import get_db, init_db
 from utils import get_weather, evaluate_habit_with_weather, ai_api_suggest_habit
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 import os
 from dotenv import load_dotenv
 import logging
@@ -66,13 +66,14 @@ def register():
             conn.close()
     return render_template("register.html")
 
-@app.route("/dashboard/<int:user_id>", methods=["GET"])
+@app.route("/dashboard/<int:user_id>", methods=["GET", "POST"])
 def dashboard(user_id):
     today = date.today().isoformat()
+    now = datetime.now()
     conn = get_db()
     c = conn.cursor()
 
-    # Lấy fullname và id an toàn
+    # Lấy thông tin người dùng
     c.execute("SELECT fullname, id FROM users WHERE id=?", (user_id,))
     user = c.fetchone()
     if not user or len(user) < 2:
@@ -80,13 +81,25 @@ def dashboard(user_id):
         flash("Người dùng không tồn tại hoặc dữ liệu không hợp lệ.")
         return redirect(url_for("login"))
 
-    # Lấy thông tin thời tiết nếu có city
-    weather_city = request.args.get("city")
+    # Lấy hoặc cập nhật thành phố được chọn
+    if request.method == "POST" and "city" in request.form:
+        weather_city = request.form["city"]
+        session["selected_city"] = weather_city
+    else:
+        weather_city = session.get("selected_city", "Hanoi")
+
     suggestion = request.args.get("suggestion")
+
+    # Lấy thời tiết
     weather = get_weather(weather_city) if weather_city else None
     logger.debug(f"Weather for {weather_city}: {weather}")
 
-    # Thói quen chưa hoàn thành
+    # Kiểm tra khung giờ nghỉ ngơi (22h đến 5h)
+    if now.hour >= 22 or now.hour < 5:
+        flash("Hiện tại là thời gian nghỉ ngơi. Hãy nghỉ sớm để bắt đầu hoạt động từ 5:00 sáng.")
+        suggestion = "Chúng tôi khuyên bạn bắt đầu hoạt động từ 5:00 sáng trở đi."
+
+    # Lấy danh sách thói quen chưa hoàn thành
     c.execute("""
         SELECT h.id, h.name, h.description, h.category, h.frequency, h.target_duration,
                h.city, h.time_of_day, h.created_date, h.weather_condition, h.evaluation, h.advice
@@ -98,9 +111,21 @@ def dashboard(user_id):
     """, (user_id, today))
     columns = [desc[0] for desc in c.description]
     pending_habits = [dict(zip(columns, row)) for row in c.fetchall()]
+
+    # Tính thời gian hoàn thành dự kiến
+    for habit in pending_habits:
+        time_str = habit.get("time_of_day")
+        duration = habit.get("target_duration", 0) or 0
+        try:
+            start_time = datetime.strptime(time_str, "%H:%M")
+            end_time = start_time + timedelta(minutes=int(duration))
+            habit["expected_completion"] = end_time.strftime("%H:%M")
+        except Exception:
+            habit["expected_completion"] = "Không xác định"
+
     logger.debug(f"Pending habits for user {user_id}: {pending_habits}")
 
-    # Thói quen đã hoàn thành
+    # Lấy danh sách thói quen đã hoàn thành
     c.execute("""
         SELECT h.name, h.time_of_day, h.description, h.target_duration, ht.timestamp
         FROM habits h
@@ -111,7 +136,7 @@ def dashboard(user_id):
     completed_habits = [dict(zip(columns, row)) for row in c.fetchall()]
     logger.debug(f"Completed habits for user {user_id}: {completed_habits}")
 
-    # Nội dung tĩnh từ bảng content
+    # Nội dung tin tức
     c.execute("SELECT title, body FROM content")
     contents = c.fetchall()
     logger.debug(f"Contents: {contents}")
